@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<title>Hermes Assistant</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: #f8f9fa;
+  color: #1f2328;
+  min-height: 100vh;
+  padding: 24px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 32px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #d1d9e0;
+}
+
+.header h1 {
+  font-size: 24px;
+  font-weight: 600;
+  color: #1f2328;
+}
+
+.header .refresh-btn {
+  background: #ffffff;
+  border: 1px solid #d1d9e0;
+  color: #656d76;
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.2s;
+}
+
+.header .refresh-btn:hover {
+  background: #f3f4f6;
+  color: #1f2328;
+  border-color: #bbc0c7;
+}
+
+.stats-bar {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.stat-card {
+  background: #ffffff;
+  border: 1px solid #d1d9e0;
+  border-radius: 8px;
+  padding: 16px 24px;
+  flex: 1;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+
+.stat-card .label {
+  font-size: 12px;
+  color: #656d76;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+
+.stat-card .value {
+  font-size: 28px;
+  font-weight: 700;
+  color: #1f2328;
+}
+
+.stat-card .value.green { color: #1a7f37; }
+.stat-card .value.yellow { color: #9a6700; }
+.stat-card .value.blue { color: #0969da; }
+
+.job-section {
+  background: #ffffff;
+  border: 1px solid #d1d9e0;
+  border-radius: 12px;
+  overflow: hidden;
+  margin-bottom: 24px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+
+.job-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  background: #f6f8fa;
+  border-bottom: 1px solid #d1d9e0;
+}
+
+.job-header h2 {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1f2328;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.job-header .job-id {
+  font-size: 12px;
+  color: #656d76;
+  font-family: 'SF Mono', monospace;
+  background: #eaeef2;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.job-header .schedule {
+  font-size: 13px;
+  color: #656d76;
+}
+
+.job-meta {
+  display: flex;
+  gap: 24px;
+  padding: 10px 24px;
+  font-size: 12px;
+  color: #656d76;
+  background: #f6f8fa;
+  border-bottom: 1px solid #d1d9e0;
+}
+
+.status-badge.paused {
+  background: #fff8c5;
+  color: #9a6700;
+}
+
+.status-dot.paused { background: #9a6700; }
+
+.runs-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.runs-table th {
+  text-align: left;
+  padding: 10px 24px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #656d76;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  background: #f6f8fa;
+  border-bottom: 1px solid #d1d9e0;
+}
+
+.runs-table td {
+  padding: 12px 24px;
+  font-size: 14px;
+  border-bottom: 1px solid #eaeef2;
+  vertical-align: top;
+}
+
+.runs-table tr:hover {
+  background: #f6f8fa;
+}
+
+.runs-table tr:last-child td {
+  border-bottom: none;
+}
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.status-badge.silent {
+  background: #eaeef2;
+  color: #656d76;
+}
+
+.status-badge.delivered {
+  background: #dafbe1;
+  color: #1a7f37;
+}
+
+.status-badge.error {
+  background: #ffebe9;
+  color: #cf222e;
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.status-dot.silent { background: #8c959f; }
+.status-dot.delivered { background: #1a7f37; }
+.status-dot.error { background: #cf222e; }
+
+.response-text {
+  color: #1f2328;
+  font-size: 13px;
+  line-height: 1.5;
+  max-width: 600px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.response-text.silent-text {
+  color: #8c959f;
+  font-style: italic;
+}
+
+.timestamp {
+  font-family: 'SF Mono', monospace;
+  font-size: 13px;
+  color: #656d76;
+  white-space: nowrap;
+}
+
+.load-more {
+  display: block;
+  width: 100%;
+  padding: 12px;
+  background: none;
+  border: none;
+  color: #0969da;
+  font-size: 13px;
+  cursor: pointer;
+  border-top: 1px solid #d1d9e0;
+}
+
+.load-more:hover {
+  background: #f6f8fa;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 48px;
+  color: #8c959f;
+}
+
+.last-update {
+  font-size: 12px;
+  color: #8c959f;
+  margin-top: 16px;
+  text-align: center;
+}
+
+/* Response detail expand */
+.response-toggle {
+  cursor: pointer;
+  color: #0969da;
+  font-size: 12px;
+  margin-top: 4px;
+  display: inline-block;
+}
+
+.response-full {
+  display: none;
+  margin-top: 8px;
+  padding: 12px;
+  background: #f6f8fa;
+  border-radius: 6px;
+  border: 1px solid #d1d9e0;
+  font-family: 'SF Mono', monospace;
+  font-size: 12px;
+  white-space: pre-wrap;
+  max-height: 300px;
+  overflow-y: auto;
+  color: #1f2328;
+}
+
+.response-full.open { display: block; }
+
+.order-link {
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.order-link:hover {
+  text-decoration: underline;
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div style="display:flex;align-items:center;gap:12px;">
+    <svg width="36" height="36" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="18" cy="18" r="18" fill="#F97316"/>
+      <path d="M18 8L18 11" stroke="white" stroke-width="2" stroke-linecap="round"/>
+      <path d="M18 25L18 28" stroke="white" stroke-width="2" stroke-linecap="round"/>
+      <path d="M8 18L11 18" stroke="white" stroke-width="2" stroke-linecap="round"/>
+      <path d="M25 18L28 18" stroke="white" stroke-width="2" stroke-linecap="round"/>
+      <circle cx="18" cy="18" r="6" stroke="white" stroke-width="2"/>
+      <circle cx="18" cy="18" r="2" fill="white"/>
+      <path d="M12.5 12.5L14 14" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
+      <path d="M22 22L23.5 23.5" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
+      <path d="M12.5 23.5L14 22" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
+      <path d="M22 14L23.5 12.5" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
+    </svg>
+    <h1>Hermes Assistant</h1>
+  </div>
+  <button class="refresh-btn" onclick="loadData()">Refresh</button>
+</div>
+
+<div class="stats-bar" id="stats-bar">
+  <div class="stat-card">
+    <div class="label">Total Runs (Today)</div>
+    <div class="value blue" id="stat-total">-</div>
+  </div>
+  <div class="stat-card">
+    <div class="label">Delivered</div>
+    <div class="value green" id="stat-delivered">-</div>
+  </div>
+  <div class="stat-card">
+    <div class="label">Silent</div>
+    <div class="value yellow" id="stat-silent">-</div>
+  </div>
+</div>
+
+<div id="jobs-container"></div>
+<div class="last-update" id="last-update"></div>
+
+<script>
+const API_BASE = '';
+
+async function loadData() {
+  try {
+    const jobsRes = await fetch(`${API_BASE}/api/jobs`);
+    const jobs = await jobsRes.json();
+    renderJobs(jobs);
+  } catch (err) {
+    document.getElementById('jobs-container').innerHTML =
+      `<div class="empty-state">Failed to load data: ${err.message}</div>`;
+  }
+  document.getElementById('last-update').textContent =
+    `Last updated: ${new Date().toLocaleString('zh-CN')}`;
+}
+
+async function loadRuns(jobId, limit = 50) {
+  const res = await fetch(`${API_BASE}/api/runs/${jobId}?limit=${limit}`);
+  return await res.json();
+}
+
+function renderJobs(jobs) {
+  const container = document.getElementById('jobs-container');
+  container.innerHTML = '';
+
+  for (const job of jobs) {
+    const section = document.createElement('div');
+    section.className = 'job-section';
+    section.dataset.jobId = job.job_id;
+
+    const jobName = job.job_name || job.last_run?.job_name || job.job_id;
+    const schedule = job.schedule_display || job.last_run?.schedule || '';
+    const state = job.state || 'unknown';
+    const stateClass = state === 'paused' ? 'paused' : state === 'active' ? 'delivered' : 'delivered';
+    const stateLabel = state === 'paused' ? 'Paused' : state === 'active' ? 'Active' : state;
+    const lastRunAt = job.last_run_at ? new Date(job.last_run_at).toLocaleString('zh-CN') : '-';
+    const nextRunAt = job.next_run_at ? new Date(job.next_run_at).toLocaleString('zh-CN') : '-';
+    const pausedAt = job.paused_at ? new Date(job.paused_at).toLocaleString('zh-CN') : '';
+
+    section.innerHTML = `
+      <div class="job-header">
+        <h2>${jobName} <span class="job-id">${job.job_id}</span> <span class="status-badge ${stateClass}"><span class="status-dot ${stateClass}"></span>${stateLabel}</span></h2>
+        <span class="schedule">${schedule} | ${job.total_runs} runs</span>
+      </div>
+      <div class="job-meta">
+        <span>Last: ${lastRunAt}</span>
+        <span>Next: ${nextRunAt}</span>
+        <span>Deliver: ${job.deliver || '-'}</span>
+        ${pausedAt ? `<span>Paused at: ${pausedAt}</span>` : ''}
+      </div>
+      <div class="runs-body" id="runs-${job.job_id}">
+        <div class="empty-state">Loading...</div>
+      </div>
+    `;
+    container.appendChild(section);
+
+    // Load runs for this job
+    loadRuns(job.job_id).then(runs => {
+      renderRuns(job.job_id, runs);
+      updateStats(runs);
+    });
+  }
+}
+
+function renderRuns(jobId, runs) {
+  const body = document.getElementById(`runs-${jobId}`);
+  if (!runs.length) {
+    body.innerHTML = '<div class="empty-state">No runs recorded</div>';
+    return;
+  }
+
+  let html = `<table class="runs-table">
+    <thead><tr>
+      <th>Time</th>
+      <th>Status</th>
+      <th>Response</th>
+    </tr></thead><tbody>`;
+
+  for (const run of runs) {
+    const status = run.status || 'unknown';
+    const statusLabel = status === 'silent' ? 'Silent' :
+                        status === 'delivered' ? 'Delivered' :
+                        status === 'no_response' ? 'No Response' : 'Unknown';
+
+    let responseHtml = '';
+    if (run.response) {
+      // Clean up [SILENT] tag but keep the reasoning content
+      let cleanResponse = run.response.replace('[SILENT]', '').trim();
+      if (!cleanResponse) {
+        // Pure [SILENT] with no explanation
+        responseHtml = `<span class="response-text silent-text">无待审批工单</span>`;
+      } else {
+        const shortResponse = cleanResponse.length > 120
+          ? cleanResponse.substring(0, 120) + '...'
+          : cleanResponse;
+        const escapedFull = escapeHtml(cleanResponse);
+        const id = `resp-${run.filename}`;
+        responseHtml = `
+          <span class="response-text${status === 'silent' ? ' silent-text' : ''}">${linkifyOrderIds(escapeHtml(shortResponse))}</span>
+          ${cleanResponse.length > 120 ? `<span class="response-toggle" onclick="toggleResponse('${id}')">Show full</span>
+          <div class="response-full" id="${id}">${linkifyOrderIds(escapedFull)}</div>` : ''}
+        `;
+      }
+    } else {
+      responseHtml = `<span class="response-text silent-text">-</span>`;
+    }
+
+    html += `<tr>
+      <td><span class="timestamp">${run.timestamp || run.filename}</span></td>
+      <td><span class="status-badge ${status}"><span class="status-dot ${status}"></span>${statusLabel}</span></td>
+      <td>${responseHtml}</td>
+    </tr>`;
+  }
+
+  html += '</tbody></table>';
+  body.innerHTML = html;
+}
+
+function updateStats(runs) {
+  const today = new Date().toISOString().split('T')[0];
+  const todayRuns = runs.filter(r => r.timestamp && r.timestamp.startsWith(today));
+
+  const total = todayRuns.length;
+  const delivered = todayRuns.filter(r => r.status === 'delivered').length;
+  const silent = todayRuns.filter(r => r.status === 'silent').length;
+
+  document.getElementById('stat-total').textContent = total;
+  document.getElementById('stat-delivered').textContent = delivered;
+  document.getElementById('stat-silent').textContent = silent;
+}
+
+function toggleResponse(id) {
+  const el = document.getElementById(id);
+  el.classList.toggle('open');
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+function linkifyOrderIds(html) {
+  return html.replace(/CM(\d{6,})/g, '<a class="order-link" href="https://op.zuoyebang.cc/static/odin/index.html#/cm/wait/detail/CM$1" target="_blank">CM$1</a>');
+}
+
+// Auto refresh every 5 minutes
+setInterval(loadData, 5 * 60 * 1000);
+
+// Initial load
+loadData();
+</script>
+</body>
+</html>
