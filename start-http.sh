@@ -6,6 +6,9 @@ LOG_DIR="$HOME/Library/Logs/assistant-http"
 LOG_FILE="$LOG_DIR/server.log"
 PORT=8090
 
+# 设置 PATH（确保 pyenv python 可用）
+export PATH="$HOME/install/pyenv/shims:$HOME/install/pyenv/versions/3.12.10/bin:$PATH"
+
 # 创建日志目录
 mkdir -p "$LOG_DIR"
 

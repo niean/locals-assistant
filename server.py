@@ -1,16 +1,22 @@
 #!/usr/bin/env python3
-"""Assistant Status Dashboard - HTTP Server with API endpoints."""
+"""Assistant Status Dashboard - HTTP Server with API endpoints + MCP server."""
 
-import http.server
 import json
 import os
 import re
 from datetime import datetime
 from pathlib import Path
 
+from mcp.server.fastmcp import FastMCP
+from starlette.requests import Request
+from starlette.responses import HTMLResponse, JSONResponse, Response
+
 CRON_OUTPUT_DIR = Path.home() / ".hermes" / "cron" / "output"
 CRON_JOBS_FILE = Path.home() / ".hermes" / "cron" / "jobs.json"
 PORT = 8090
+STATIC_DIR = Path(__file__).parent
+
+# --- Data helpers (shared by HTTP API and MCP tools) ---
 
 
 def parse_cron_output(filepath: Path) -> dict:
@@ -62,7 +68,7 @@ def parse_cron_output(filepath: Path) -> dict:
     return result
 
 
-def get_job_runs(job_id: str, limit: int = 50) -> list:
+def _get_job_runs(job_id: str, limit: int = 50) -> list:
     """Get recent runs for a specific job."""
     job_dir = CRON_OUTPUT_DIR / job_id
     if not job_dir.exists():
@@ -78,30 +84,23 @@ def get_job_runs(job_id: str, limit: int = 50) -> list:
     return runs
 
 
-def get_jobs_config() -> list:
-    """Read jobs.json for job metadata."""
+def get_jobs_config() -> dict:
+    """Read jobs.json for job metadata, return dict keyed by job id."""
     if not CRON_JOBS_FILE.exists():
-        return []
+        return {}
     try:
         data = json.loads(CRON_JOBS_FILE.read_text())
-        if isinstance(data, list):
-            return data
-        return []
+        jobs_config = {}
+        for job in data.get("jobs", []):
+            jobs_config[job["id"]] = job
+        return jobs_config
     except Exception:
-        return []
+        return {}
 
 
 def get_all_jobs_summary() -> list:
     """Get summary info for all jobs, merging config and output data."""
-    # Load job configs from jobs.json
-    jobs_config = {}
-    if CRON_JOBS_FILE.exists():
-        try:
-            data = json.loads(CRON_JOBS_FILE.read_text())
-            for job in data.get("jobs", []):
-                jobs_config[job["id"]] = job
-        except Exception:
-            pass
+    jobs_config = get_jobs_config()
 
     summaries = []
     if not CRON_OUTPUT_DIR.exists():
@@ -113,7 +112,10 @@ def get_all_jobs_summary() -> list:
         files = sorted(job_dir.glob("*.md"), reverse=True)
         last_run = None
         if files:
-            last_run = parse_cron_output(files[0])
+            try:
+                last_run = parse_cron_output(files[0])
+            except Exception:
+                pass
 
         job_id = job_dir.name
         config = jobs_config.get(job_id, {})
@@ -136,56 +138,145 @@ def get_all_jobs_summary() -> list:
     return summaries
 
 
-class AssistantHandler(http.server.SimpleHTTPRequestHandler):
-    def do_GET(self):
-        if self.path == "/" or self.path == "/index.html":
-            self.send_response(200)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.end_headers()
-            html_path = Path(__file__).parent / "index.html"
-            self.wfile.write(html_path.read_bytes())
+# --- MCP Server (single Starlette app serves both MCP and HTTP) ---
 
-        elif self.path == "/api/jobs":
-            self.send_json(get_all_jobs_summary())
-
-        elif self.path.startswith("/api/runs/"):
-            parts = self.path.split("/")
-            job_id = parts[3] if len(parts) > 3 else ""
-            # Parse limit from query
-            limit = 50
-            if "?" in self.path:
-                query = self.path.split("?")[1]
-                for param in query.split("&"):
-                    if param.startswith("limit="):
-                        try:
-                            limit = int(param.split("=")[1])
-                        except ValueError:
-                            pass
-                job_id = job_id.split("?")[0]
-            runs = get_job_runs(job_id, limit=limit)
-            self.send_json(runs)
-
-        else:
-            super().do_GET()
-
-    def send_json(self, data):
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.end_headers()
-        self.wfile.write(json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8"))
-
-    def log_message(self, format, *args):
-        # Quieter logging
-        pass
+mcp = FastMCP(
+    "Hermes Assistant",
+    instructions="查询 Hermes 定时任务(cron jobs)的配置与执行状态。",
+)
 
 
-class AssistantHTTPServer(http.server.HTTPServer):
-    allow_reuse_address = True
+@mcp.tool()
+def list_cron_jobs() -> str:
+    """列出所有 Hermes 定时任务及其当前状态摘要。
+
+    返回每个任务的 ID、名称、调度表达式、状态(active/paused)、
+    上次执行时间、下次执行时间、总执行次数等信息。
+    """
+    jobs = get_all_jobs_summary()
+    if not jobs:
+        return "当前没有定时任务。"
+
+    lines = []
+    for j in jobs:
+        state_icon = "▶" if j["state"] in ("active", "scheduled") else "⏸" if j["state"] == "paused" else "?"
+        last_status = ""
+        if j.get("last_run"):
+            last_status = f" | 最近状态: {j['last_run'].get('status', 'unknown')}"
+        lines.append(
+            f"{state_icon} {j['job_name']} ({j['job_id']})\n"
+            f"  调度: {j['schedule_display']} | 状态: {j['state']} | 总执行: {j['total_runs']}次\n"
+            f"  上次: {j.get('last_run_at', '-')} | 下次: {j.get('next_run_at', '-')}{last_status}"
+        )
+    return f"共 {len(jobs)} 个定时任务:\n\n" + "\n\n".join(lines)
+
+
+@mcp.tool()
+def get_job_runs(job_id: str, limit: int = 10) -> str:
+    """查询指定定时任务的最近执行记录。
+
+    Args:
+        job_id: 任务ID（12位十六进制字符串，如 69b434e29ac6）
+        limit: 返回最近几条记录，默认10，最大50
+    """
+    if limit > 50:
+        limit = 50
+    runs = _get_job_runs(job_id, limit=limit)
+    if not runs:
+        return f"未找到任务 {job_id} 的执行记录（任务ID可能不存在或尚无执行历史）。"
+
+    # Get job name from config
+    jobs_config = get_jobs_config()
+    config = jobs_config.get(job_id, {})
+    job_name = config.get("name", job_id)
+
+    lines = [f"任务: {job_name} ({job_id})", f"最近 {len(runs)} 条执行记录:", ""]
+    for r in runs:
+        status_icon = "✓" if r.get("status") == "delivered" else "○" if r.get("status") == "silent" else "✗"
+        ts = r.get("timestamp", r.get("filename", "?"))
+        response_preview = ""
+        if r.get("response"):
+            resp = r["response"].replace("[SILENT]", "").strip()
+            if resp:
+                if len(resp) > 200:
+                    resp = resp[:200] + "..."
+                response_preview = f"\n    {resp}"
+        lines.append(f"  {status_icon} [{ts}] {r.get('status', 'unknown')}{response_preview}")
+
+    return "\n".join(lines)
+
+
+@mcp.tool()
+def get_job_detail(job_id: str) -> str:
+    """查询指定定时任务的详细配置信息。
+
+    Args:
+        job_id: 任务ID（12位十六进制字符串）
+    """
+    jobs_config = get_jobs_config()
+    config = jobs_config.get(job_id)
+    if not config:
+        return f"未找到任务 {job_id} 的配置信息。"
+
+    lines = [
+        f"任务详情: {config.get('name', job_id)}",
+        f"  ID: {job_id}",
+        f"  状态: {config.get('state', 'unknown')}",
+        f"  调度: {config.get('schedule_display', '-')} (cron: {config.get('schedule', '-')})",
+        f"  上次执行: {config.get('last_run_at', '-')}",
+        f"  下次执行: {config.get('next_run_at', '-')}",
+        f"  投递目标: {config.get('deliver', '-')}",
+    ]
+
+    if config.get("prompt"):
+        prompt = config["prompt"]
+        if len(prompt) > 300:
+            prompt = prompt[:300] + "..."
+        lines.append(f"  Prompt: {prompt}")
+
+    if config.get("script"):
+        lines.append(f"  脚本: {config['script']}")
+
+    if config.get("skills"):
+        lines.append(f"  Skills: {', '.join(config['skills'])}")
+
+    if config.get("paused_at"):
+        lines.append(f"  暂停时间: {config['paused_at']}")
+
+    return "\n".join(lines)
+
+
+# --- Custom HTTP routes (served by the same Starlette app as MCP) ---
+
+
+@mcp.custom_route("/", methods=["GET"])
+async def homepage(request: Request) -> Response:
+    html_path = STATIC_DIR / "index.html"
+    return HTMLResponse(html_path.read_text(encoding="utf-8"))
+
+
+@mcp.custom_route("/api/jobs", methods=["GET"])
+async def api_jobs(request: Request) -> Response:
+    data = get_all_jobs_summary()
+    return JSONResponse(data)
+
+
+@mcp.custom_route("/api/runs/{job_id}", methods=["GET"])
+async def api_runs(request: Request) -> Response:
+    job_id = request.path_params["job_id"]
+    limit = int(request.query_params.get("limit", "50"))
+    runs = _get_job_runs(job_id, limit=limit)
+    return JSONResponse(runs)
+
+
+# --- Entry point ---
+
+app = mcp.streamable_http_app()
 
 
 if __name__ == "__main__":
-    os.chdir(Path(__file__).parent)
-    server = AssistantHTTPServer(("0.0.0.0", PORT), AssistantHandler)
+    import uvicorn
+    os.chdir(STATIC_DIR)
     print(f"Assistant Dashboard running at http://localhost:{PORT}")
-    server.serve_forever()
+    print(f"MCP endpoint: http://localhost:{PORT}/mcp")
+    uvicorn.run(app, host="0.0.0.0", port=PORT, log_level="warning")
