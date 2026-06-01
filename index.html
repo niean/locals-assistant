@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
 <title>Hermes Assistant</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -377,7 +377,7 @@ body {
 <div class="last-update" id="last-update"></div>
 
 <script>
-const API = '';
+const API = '/assistant';
 
 function switchTab(name) {
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -625,5 +625,6 @@ function linkify(html) { return html.replace(/CM(\d{6,})/g, '<a class="order-lin
 setInterval(loadAll, 5 * 60 * 1000);
 loadAll();
 </script>
+<script src="/shared-nav.js"></script>
 </body>
 </html>
