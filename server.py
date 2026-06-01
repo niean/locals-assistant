@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""Assistant Status Dashboard - HTTP Server with API endpoints + MCP server.
+"""Assistant Status Dashboard - HTTP Server with API endpoints.
 
 Serves:
 - Web dashboard at /
 - REST API at /api/*
-- MCP (Streamable HTTP) at /mcp
 """
 
 import json
@@ -16,9 +15,11 @@ import time
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-from mcp.server.fastmcp import FastMCP
+from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, Response
+from starlette.routing import Route, Mount
+from starlette.staticfiles import StaticFiles
 
 HERMES_DIR = Path.home() / ".hermes"
 CRON_OUTPUT_DIR = HERMES_DIR / "cron" / "output"
@@ -112,23 +113,45 @@ def get_all_jobs_summary() -> list:
     """Get summary info for all jobs, merging config and output data."""
     jobs_config = get_jobs_config()
     summaries = []
-    if not CRON_OUTPUT_DIR.exists():
-        return summaries
+    seen_ids = set()
 
-    for job_dir in sorted(CRON_OUTPUT_DIR.iterdir()):
-        if not job_dir.is_dir():
+    # Scan output directories for jobs with run history
+    if CRON_OUTPUT_DIR.exists():
+        for job_dir in sorted(CRON_OUTPUT_DIR.iterdir()):
+            if not job_dir.is_dir():
+                continue
+            files = sorted(job_dir.glob("*.md"), reverse=True)
+            last_run = None
+            if files:
+                try:
+                    last_run = parse_cron_output(files[0])
+                except Exception:
+                    pass
+
+            job_id = job_dir.name
+            seen_ids.add(job_id)
+            config = jobs_config.get(job_id, {})
+
+            summaries.append({
+                "job_id": job_id,
+                "job_name": config.get("name", job_id),
+                "state": config.get("state", "unknown"),
+                "enabled": config.get("enabled", False),
+                "schedule_display": config.get("schedule_display", ""),
+                "last_run_at": config.get("last_run_at"),
+                "next_run_at": config.get("next_run_at"),
+                "last_status": config.get("last_status"),
+                "paused_at": config.get("paused_at"),
+                "deliver": config.get("deliver"),
+                "repeat_completed": config.get("repeat", {}).get("completed", 0) if isinstance(config.get("repeat"), dict) else 0,
+                "total_runs": len(files),
+                "last_run": last_run,
+            })
+
+    # Also include jobs from config that have no output directory yet
+    for job_id, config in jobs_config.items():
+        if job_id in seen_ids:
             continue
-        files = sorted(job_dir.glob("*.md"), reverse=True)
-        last_run = None
-        if files:
-            try:
-                last_run = parse_cron_output(files[0])
-            except Exception:
-                pass
-
-        job_id = job_dir.name
-        config = jobs_config.get(job_id, {})
-
         summaries.append({
             "job_id": job_id,
             "job_name": config.get("name", job_id),
@@ -141,8 +164,8 @@ def get_all_jobs_summary() -> list:
             "paused_at": config.get("paused_at"),
             "deliver": config.get("deliver"),
             "repeat_completed": config.get("repeat", {}).get("completed", 0) if isinstance(config.get("repeat"), dict) else 0,
-            "total_runs": len(list(job_dir.glob("*.md"))),
-            "last_run": last_run,
+            "total_runs": 0,
+            "last_run": None,
         })
     return summaries
 
@@ -277,12 +300,15 @@ def get_sessions_stats(days: int = 7) -> dict:
         """, (cutoff,)).fetchall()
         result["by_source"] = [{"source": r["source"], "sessions": r["cnt"], "messages": r["msgs"]} for r in rows]
 
-        # Recent sessions (last 10 non-cron)
+        # Active sessions (non-cron, non-api_server, not ended)
         rows = cursor.execute("""
-            SELECT id, title, source, model, started_at, ended_at, message_count, tool_call_count
+            SELECT id, title, source, model, started_at, ended_at,
+                   message_count, tool_call_count,
+                   COALESCE(input_tokens, 0) as input_tokens,
+                   COALESCE(output_tokens, 0) as output_tokens
             FROM sessions
-            WHERE source != 'cron' AND started_at > ?
-            ORDER BY started_at DESC LIMIT 10
+            WHERE source NOT IN ('cron', 'api_server') AND started_at > ? AND ended_at IS NULL
+            ORDER BY started_at DESC LIMIT 20
         """, (cutoff,)).fetchall()
         result["recent_sessions"] = [{
             "id": r["id"],
@@ -290,9 +316,34 @@ def get_sessions_stats(days: int = 7) -> dict:
             "source": r["source"],
             "model": r["model"],
             "started_at": datetime.fromtimestamp(r["started_at"], tz=TZ_CST).isoformat(),
-            "active": r["ended_at"] is None,
+            "active": True,
             "messages": r["message_count"],
             "tool_calls": r["tool_call_count"],
+            "input_tokens": r["input_tokens"],
+            "output_tokens": r["output_tokens"],
+        } for r in rows]
+
+        # Inactive sessions (non-cron, non-api_server, ended)
+        rows = cursor.execute("""
+            SELECT id, title, source, model, started_at, ended_at,
+                   message_count, tool_call_count,
+                   COALESCE(input_tokens, 0) as input_tokens,
+                   COALESCE(output_tokens, 0) as output_tokens
+            FROM sessions
+            WHERE source NOT IN ('cron', 'api_server') AND started_at > ? AND ended_at IS NOT NULL
+            ORDER BY ended_at DESC LIMIT 20
+        """, (cutoff,)).fetchall()
+        result["inactive_sessions"] = [{
+            "id": r["id"],
+            "title": r["title"] or "(untitled)",
+            "source": r["source"],
+            "model": r["model"],
+            "started_at": datetime.fromtimestamp(r["started_at"], tz=TZ_CST).isoformat(),
+            "active": False,
+            "messages": r["message_count"],
+            "tool_calls": r["tool_call_count"],
+            "input_tokens": r["input_tokens"],
+            "output_tokens": r["output_tokens"],
         } for r in rows]
 
         conn.close()
@@ -344,206 +395,288 @@ def get_system_overview() -> dict:
     }
 
 
-# ═══════════════════════════════════════════════════════════
-# MCP Server
-# ═══════════════════════════════════════════════════════════
-
-mcp = FastMCP(
-    "Hermes Assistant",
-    instructions="查询 Hermes Agent 的运行状态：Gateway、定时任务、会话统计、今日活动等。",
-)
+SKILLS_DIR = HERMES_DIR / "skills"
+PLUGINS_DIR = HERMES_DIR / "plugins"
+CUSTOM_AUTHOR = "niean"
 
 
-@mcp.tool()
-def list_cron_jobs() -> str:
-    """列出所有 Hermes 定时任务及其当前状态摘要。
+def get_all_skills() -> dict:
+    """Scan skills directory and return custom + other skills."""
+    custom = []
+    other = []
+    if not SKILLS_DIR.exists():
+        return {"custom": custom, "other": other}
 
-    返回每个任务的 ID、名称、调度表达式、状态(active/paused)、
-    上次执行时间、下次执行时间、总执行次数等信息。
-    """
-    jobs = get_all_jobs_summary()
-    if not jobs:
-        return "当前没有定时任务。"
+    for skill_md in sorted(SKILLS_DIR.rglob("SKILL.md")):
+        rel = skill_md.relative_to(SKILLS_DIR)
+        parts = rel.parts  # e.g. ('devops', 'aliyun-oss', 'SKILL.md')
+        category = parts[0] if len(parts) > 1 else ""
+        skill_name = parts[-2] if len(parts) >= 2 else parts[0]
+        skill_path = str(skill_md)
 
-    lines = []
-    for j in jobs:
-        state_icon = "▶" if j["state"] in ("active", "scheduled") else "⏸" if j["state"] == "paused" else "?"
-        last_status = ""
-        if j.get("last_run"):
-            last_status = f" | 最近状态: {j['last_run'].get('status', 'unknown')}"
-        lines.append(
-            f"{state_icon} {j['job_name']} ({j['job_id']})\n"
-            f"  调度: {j['schedule_display']} | 状态: {j['state']} | 总执行: {j['total_runs']}次\n"
-            f"  上次: {j.get('last_run_at', '-')} | 下次: {j.get('next_run_at', '-')}{last_status}"
-        )
-    return f"共 {len(jobs)} 个定时任务:\n\n" + "\n\n".join(lines)
+        # Parse frontmatter for metadata
+        meta = {"name": skill_name, "category": category, "path": skill_path,
+                "rel_path": str(rel.parent), "description": "", "trigger": ""}
+        is_custom = False
+        try:
+            content = skill_md.read_text(encoding="utf-8")
+            if content.startswith("---"):
+                end = content.find("---", 3)
+                if end > 0:
+                    import yaml
+                    fm = yaml.safe_load(content[3:end])
+                    if isinstance(fm, dict):
+                        meta["name"] = fm.get("name", skill_name)
+                        meta["description"] = fm.get("description", "").strip()
+                        meta["trigger"] = fm.get("trigger", "")
+                        # Check author in metadata or top-level
+                        author = fm.get("author", "")
+                        if not author:
+                            metadata = fm.get("metadata", {})
+                            if isinstance(metadata, dict):
+                                author = metadata.get("author", "")
+                        if author == CUSTOM_AUTHOR:
+                            is_custom = True
+        except Exception:
+            pass
 
+        if is_custom:
+            custom.append(meta)
+        else:
+            other.append(meta)
 
-@mcp.tool()
-def get_job_runs(job_id: str, limit: int = 10) -> str:
-    """查询指定定时任务的最近执行记录。
-
-    Args:
-        job_id: 任务ID（12位十六进制字符串，如 69b434e29ac6）
-        limit: 返回最近几条记录，默认10，最大50
-    """
-    if limit > 50:
-        limit = 50
-    runs = _get_job_runs(job_id, limit=limit)
-    if not runs:
-        return f"未找到任务 {job_id} 的执行记录。"
-
-    jobs_config = get_jobs_config()
-    config = jobs_config.get(job_id, {})
-    job_name = config.get("name", job_id)
-
-    lines = [f"任务: {job_name} ({job_id})", f"最近 {len(runs)} 条执行记录:", ""]
-    for r in runs:
-        status_icon = "✓" if r.get("status") == "delivered" else "○" if r.get("status") == "silent" else "✗"
-        ts = r.get("timestamp", r.get("filename", "?"))
-        response_preview = ""
-        if r.get("response"):
-            resp = r["response"].replace("[SILENT]", "").strip()
-            if resp:
-                if len(resp) > 200:
-                    resp = resp[:200] + "..."
-                response_preview = f"\n    {resp}"
-        lines.append(f"  {status_icon} [{ts}] {r.get('status', 'unknown')}{response_preview}")
-    return "\n".join(lines)
+    return {"custom": custom, "other": other}
 
 
-@mcp.tool()
-def get_job_detail(job_id: str) -> str:
-    """查询指定定时任务的详细配置信息。
-
-    Args:
-        job_id: 任务ID（12位十六进制字符串）
-    """
-    jobs_config = get_jobs_config()
-    config = jobs_config.get(job_id)
-    if not config:
-        return f"未找到任务 {job_id} 的配置信息。"
-
-    lines = [
-        f"任务详情: {config.get('name', job_id)}",
-        f"  ID: {job_id}",
-        f"  状态: {config.get('state', 'unknown')}",
-        f"  调度: {config.get('schedule_display', '-')} (cron: {config.get('schedule', '-')})",
-        f"  上次执行: {config.get('last_run_at', '-')}",
-        f"  下次执行: {config.get('next_run_at', '-')}",
-        f"  投递目标: {config.get('deliver', '-')}",
-    ]
-    if config.get("prompt"):
-        prompt = config["prompt"]
-        if len(prompt) > 300:
-            prompt = prompt[:300] + "..."
-        lines.append(f"  Prompt: {prompt}")
-    if config.get("script"):
-        lines.append(f"  脚本: {config['script']}")
-    if config.get("skills"):
-        lines.append(f"  Skills: {', '.join(config['skills'])}")
-    if config.get("paused_at"):
-        lines.append(f"  暂停时间: {config['paused_at']}")
-    return "\n".join(lines)
+def get_all_plugins() -> list:
+    """Scan plugins directory for installed plugins."""
+    plugins = []
+    if not PLUGINS_DIR.exists():
+        return plugins
+    for plugin_dir in sorted(PLUGINS_DIR.iterdir()):
+        if not plugin_dir.is_dir():
+            continue
+        yaml_file = plugin_dir / "plugin.yaml"
+        if not yaml_file.exists():
+            continue
+        try:
+            import yaml
+            meta = yaml.safe_load(yaml_file.read_text(encoding="utf-8"))
+            if not isinstance(meta, dict):
+                continue
+            # Check enabled status from config
+            enabled_list = _get_config_plugins_enabled()
+            plugins.append({
+                "name": meta.get("name", plugin_dir.name),
+                "version": meta.get("version", ""),
+                "description": meta.get("description", ""),
+                "author": meta.get("author", ""),
+                "tools": meta.get("provides_tools", []),
+                "enabled": plugin_dir.name in enabled_list,
+            })
+        except Exception:
+            continue
+    return plugins
 
 
-@mcp.tool()
-def hermes_status() -> str:
-    """获取 Hermes Agent 整体运行状态概览。
+def _get_config_plugins_enabled() -> list:
+    """Read enabled plugins from config.yaml."""
+    if not CONFIG_FILE.exists():
+        return []
+    try:
+        import yaml
+        data = yaml.safe_load(CONFIG_FILE.read_text(encoding="utf-8"))
+        return data.get("plugins", {}).get("enabled", [])
+    except Exception:
+        return []
 
-    包含 Gateway 进程状态、当前模型、已连接平台、
-    今日活动统计、最近7天会话汇总等信息。
-    """
-    overview = get_system_overview()
 
-    lines = ["═══ Hermes Agent 状态 ═══", ""]
-
-    # Gateway
-    gw = overview["gateway"]
-    if gw["running"]:
-        lines.append(f"▶ Gateway: 运行中 (PID {gw['pid']}, uptime {gw['uptime']})")
-    else:
-        lines.append("✗ Gateway: 未运行")
-
-    # Model
-    mi = overview["model"]
-    lines.append(f"  模型: {mi['model']} / {mi['provider']}")
-
-    # Platforms
-    pnames = [p["name"] for p in overview["platforms"] if p["configured"]]
-    lines.append(f"  平台: {', '.join(pnames) if pnames else '无'}")
-    lines.append("")
-
-    # Today
-    td = overview["today"]
-    lines.append(f"▶ 今日活动:")
-    lines.append(f"  会话: {td['sessions']} | 消息: {td['messages']} | 工具调用: {td['tool_calls']} | Tokens: {td['tokens']:,}")
-    lines.append("")
-
-    # 7-day sessions
-    s7 = overview["sessions_7d"]
-    lines.append(f"▶ 最近7天:")
-    lines.append(f"  会话: {s7['total_sessions']} (活跃: {s7['active_sessions']}) | 消息: {s7['total_messages']} | 工具: {s7['total_tool_calls']}")
-    lines.append(f"  Tokens: 入 {s7['input_tokens']:,} / 出 {s7['output_tokens']:,}")
-    if s7["by_source"]:
-        src_parts = [f"{s['source']}({s['sessions']})" for s in s7["by_source"]]
-        lines.append(f"  来源: {', '.join(src_parts)}")
-    lines.append("")
-
-    # Cron jobs
-    jobs = overview["cron_jobs"]
-    lines.append(f"▶ 定时任务: {len(jobs)} 个")
-    for j in jobs:
-        state_icon = "▶" if j["state"] in ("active", "scheduled") else "⏸"
-        lines.append(f"  {state_icon} {j['job_name']} | {j['schedule_display']} | 已执行 {j['total_runs']}次")
-
-    return "\n".join(lines)
+def get_mcp_servers() -> list:
+    """Read MCP server config from config.yaml."""
+    if not CONFIG_FILE.exists():
+        return []
+    try:
+        import yaml
+        data = yaml.safe_load(CONFIG_FILE.read_text(encoding="utf-8"))
+        servers = data.get("mcp_servers", {})
+        if not isinstance(servers, dict) or not servers:
+            return []
+        result = []
+        for name, cfg in servers.items():
+            result.append({
+                "name": name,
+                "url": cfg.get("url", "") if isinstance(cfg, dict) else "",
+                "timeout": cfg.get("timeout", 30) if isinstance(cfg, dict) else 30,
+            })
+        return result
+    except Exception:
+        return []
 
 
 # ═══════════════════════════════════════════════════════════
-# Custom HTTP routes (served by the same Starlette app as MCP)
+# HTTP Routes
 # ═══════════════════════════════════════════════════════════
 
 
-@mcp.custom_route("/", methods=["GET"])
-async def homepage(request: Request) -> Response:
-    html_path = STATIC_DIR / "index.html"
-    return HTMLResponse(html_path.read_text(encoding="utf-8"))
 
 
-@mcp.custom_route("/api/jobs", methods=["GET"])
 async def api_jobs(request: Request) -> Response:
     return JSONResponse(get_all_jobs_summary())
 
 
-@mcp.custom_route("/api/runs/{job_id}", methods=["GET"])
 async def api_runs(request: Request) -> Response:
     job_id = request.path_params["job_id"]
     limit = int(request.query_params.get("limit", "50"))
     return JSONResponse(_get_job_runs(job_id, limit=limit))
 
 
-@mcp.custom_route("/api/status", methods=["GET"])
 async def api_status(request: Request) -> Response:
     return JSONResponse(get_system_overview())
 
 
-@mcp.custom_route("/api/sessions", methods=["GET"])
 async def api_sessions(request: Request) -> Response:
     days = int(request.query_params.get("days", "7"))
     return JSONResponse(get_sessions_stats(days=days))
+
+
+async def api_disconnect_session(request: Request) -> Response:
+    """Mark a session as ended (disconnected)."""
+    session_id = request.path_params["session_id"]
+    if not STATE_DB.exists():
+        return JSONResponse({"error": "state.db not found"}, status_code=500)
+    try:
+        conn = sqlite3.connect(str(STATE_DB), timeout=5)
+        cursor = conn.cursor()
+        row = cursor.execute(
+            "SELECT id, ended_at FROM sessions WHERE id = ?", (session_id,)
+        ).fetchone()
+        if not row:
+            conn.close()
+            return JSONResponse({"error": f"Session '{session_id}' not found"}, status_code=404)
+        if row[1] is not None:
+            conn.close()
+            return JSONResponse({"error": "Session already ended"}, status_code=400)
+        conn.execute(
+            "UPDATE sessions SET ended_at = ?, end_reason = ? WHERE id = ?",
+            (time.time(), "manual_disconnect", session_id),
+        )
+        conn.commit()
+        conn.close()
+        return JSONResponse({"ok": True, "session_id": session_id})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+async def api_session_messages(request: Request) -> Response:
+    """Return messages for a given session."""
+    session_id = request.path_params["session_id"]
+    if not STATE_DB.exists():
+        return JSONResponse({"error": "state.db not found"}, status_code=500)
+    try:
+        conn = sqlite3.connect(str(STATE_DB), timeout=5)
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute("""
+            SELECT role, content, tool_name, timestamp
+            FROM messages WHERE session_id = ?
+            ORDER BY timestamp ASC LIMIT 200
+        """, (session_id,)).fetchall()
+        conn.close()
+        messages = []
+        for r in rows:
+            content = r["content"] or ""
+            # Truncate very long messages
+            if len(content) > 2000:
+                content = content[:2000] + "\n...(truncated)"
+            messages.append({
+                "role": r["role"],
+                "content": content,
+                "tool_name": r["tool_name"],
+                "time": datetime.fromtimestamp(r["timestamp"], tz=TZ_CST).strftime("%H:%M:%S"),
+            })
+        return JSONResponse({"session_id": session_id, "messages": messages})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+async def api_rename_session(request: Request) -> Response:
+    """Rename a session title."""
+    session_id = request.path_params["session_id"]
+    if not STATE_DB.exists():
+        return JSONResponse({"error": "state.db not found"}, status_code=500)
+    try:
+        body = await request.json()
+        new_title = body.get("title", "").strip()
+        if not new_title:
+            return JSONResponse({"error": "Title cannot be empty"}, status_code=400)
+        conn = sqlite3.connect(str(STATE_DB), timeout=5)
+        row = conn.execute("SELECT id FROM sessions WHERE id = ?", (session_id,)).fetchone()
+        if not row:
+            conn.close()
+            return JSONResponse({"error": f"Session '{session_id}' not found"}, status_code=404)
+        conn.execute("UPDATE sessions SET title = ? WHERE id = ?", (new_title, session_id))
+        conn.commit()
+        conn.close()
+        return JSONResponse({"ok": True, "session_id": session_id, "title": new_title})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+async def api_prompt(request: Request) -> Response:
+    """Return the prompt text for a given job."""
+    job_id = request.path_params["job_id"]
+    jobs_config = get_jobs_config()
+    job = jobs_config.get(job_id)
+    if not job:
+        return JSONResponse({"error": f"Job '{job_id}' not found"}, status_code=404)
+    prompt = job.get("prompt", "")
+    return JSONResponse({"job_id": job_id, "job_name": job.get("name", job_id), "prompt": prompt})
+
+
+async def api_skills(request: Request) -> Response:
+    return JSONResponse(get_all_skills())
+
+
+async def api_plugins(request: Request) -> Response:
+    return JSONResponse(get_all_plugins())
+
+
+async def api_mcp_servers(request: Request) -> Response:
+    return JSONResponse(get_mcp_servers())
+
+
+async def api_skill_content(request: Request) -> Response:
+    """Return the raw SKILL.md content for a given skill path."""
+    skill_path = request.path_params["skill_path"]
+    skill_md = SKILLS_DIR / skill_path / "SKILL.md"
+    if not skill_md.exists() or not str(skill_md.resolve()).startswith(str(SKILLS_DIR.resolve())):
+        return JSONResponse({"error": "Skill not found"}, status_code=404)
+    content = skill_md.read_text(encoding="utf-8")
+    return JSONResponse({"path": skill_path, "content": content})
 
 
 # ═══════════════════════════════════════════════════════════
 # Entry point
 # ═══════════════════════════════════════════════════════════
 
-app = mcp.streamable_http_app()
+app = Starlette(routes=[
+    Route("/api/jobs", api_jobs),
+    Route("/api/runs/{job_id}", api_runs),
+    Route("/api/status", api_status),
+    Route("/api/sessions", api_sessions),
+    Route("/api/sessions/{session_id}/messages", api_session_messages),
+    Route("/api/sessions/{session_id}/disconnect", api_disconnect_session, methods=["POST"]),
+    Route("/api/sessions/{session_id}/rename", api_rename_session, methods=["POST"]),
+    Route("/api/prompt/{job_id}", api_prompt),
+    Route("/api/skills", api_skills),
+    Route("/api/skills/{skill_path:path}/content", api_skill_content),
+    Route("/api/plugins", api_plugins),
+    Route("/api/mcp", api_mcp_servers),
+    Mount("/", StaticFiles(directory=str(STATIC_DIR), html=True)),
+])
 
 
 if __name__ == "__main__":
     import uvicorn
     os.chdir(STATIC_DIR)
     print(f"Assistant Dashboard running at http://localhost:{PORT}")
-    print(f"MCP endpoint: http://localhost:{PORT}/mcp")
     uvicorn.run(app, host="0.0.0.0", port=PORT, log_level="warning")
