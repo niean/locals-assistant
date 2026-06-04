@@ -26,26 +26,26 @@ function renderSessions(data) {
   if (!data.recent_sessions || !data.recent_sessions.length) {
     document.getElementById('sessions-list').innerHTML = '<div class="empty-state">No active sessions</div>';
   } else {
-    document.getElementById('sessions-list').innerHTML = renderSessionTable(data.recent_sessions, true);
+    document.getElementById('sessions-list').innerHTML = renderSessionTable(data.recent_sessions);
   }
 
   if (!data.inactive_sessions || !data.inactive_sessions.length) {
     document.getElementById('sessions-inactive').innerHTML = '<div class="empty-state">No inactive sessions</div>';
   } else {
-    document.getElementById('sessions-inactive').innerHTML = renderSessionTable(data.inactive_sessions, false);
+    document.getElementById('sessions-inactive').innerHTML = renderSessionTable(data.inactive_sessions, true);
   }
 }
 
-function renderSessionTable(sessions, showDisconnect) {
-  let html = `<table class="sessions-table" style="table-layout:fixed;"><colgroup><col style="width:300px;"><col><col style="width:100px;"><col style="width:100px;"><col style="width:80px;"><col style="width:80px;"><col style="width:80px;"><col style="width:120px;"></colgroup><thead><tr><th>ID</th><th>Title</th><th>Source</th><th>Started</th><th style="text-align:right;">Msgs</th><th style="text-align:right;">Tools</th><th style="text-align:right;">Tokens</th><th>Actions</th></tr></thead><tbody>`;
+function renderSessionTable(sessions, forceIdle = false) {
+  let html = `<table class="sessions-table" style="table-layout:fixed;"><colgroup><col style="width:300px;"><col><col style="width:100px;"><col style="width:100px;"><col style="width:80px;"><col style="width:80px;"><col style="width:80px;"><col style="width:150px;"><col style="width:80px;"></colgroup><thead><tr><th>ID</th><th>Title</th><th>Source</th><th>Started</th><th style="text-align:right;">Msgs</th><th style="text-align:right;">Tools</th><th style="text-align:right;">Tokens</th><th>End Reason</th><th>Actions</th></tr></thead><tbody>`;
   for (const s of sessions) {
     const time = new Date(s.started_at).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
     const totalTokens = (s.input_tokens || 0) + (s.output_tokens || 0);
     const tokenK = totalTokens > 0 ? (totalTokens / 1000).toFixed(1) + 'K' : '-';
     const tokenDisplay = totalTokens > 0 ? `<span title="in: ${formatNumber(s.input_tokens)} / out: ${formatNumber(s.output_tokens)}">${tokenK}</span>` : '-';
     const viewBtn = `<button class="icon-btn" onclick="showSessionMessages('${s.id}', '${escapeHtml(s.title)}')" title="View messages"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M1.679 7.932c.412-.621 1.242-1.75 2.366-2.717C5.175 4.242 6.527 3.5 8 3.5c1.473 0 2.825.742 3.955 1.715 1.124.967 1.954 2.096 2.366 2.717a.12.12 0 0 1 0 .136c-.412.621-1.242 1.75-2.366 2.717C10.825 11.758 9.473 12.5 8 12.5c-1.473 0-2.825-.742-3.955-1.715C2.921 9.818 2.091 8.69 1.679 8.068a.12.12 0 0 1 0-.136zM8 2c-1.981 0-3.67.992-4.933 2.078C1.86 5.137.907 6.41.458 7.088a1.62 1.62 0 0 0 0 1.824c.449.678 1.402 1.951 2.609 3.01C4.33 13.008 6.019 14 8 14c1.981 0 3.67-.992 4.933-2.078 1.207-1.059 2.16-2.332 2.609-3.01a1.62 1.62 0 0 0 0-1.824c-.449-.678-1.402-1.951-2.609-3.01C11.67 2.992 9.981 2 8 2zm0 4a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm-3.5 2a3.5 3.5 0 1 1 7 0 3.5 3.5 0 0 1-7 0z"/></svg></button>`;
-    const disconnectBtn = showDisconnect ? `<button class="icon-btn icon-btn--danger" onclick="disconnectSession('${s.id}', this)" title="Disconnect session"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.75.75 0 1 1 1.06 1.06L9.06 8l3.22 3.22a.75.75 0 1 1-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 0 1-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06z"/></svg></button>` : '';
-    html += `<tr>
+    const rowClass = forceIdle ? ' class="session-idle"' : '';
+    html += `<tr${rowClass}>
       <td class="id-cell" title="${s.id}"><span class="job-id">${s.id}</span></td>
       <td class="title-cell" title="${escapeHtml(s.title)}">
         <span id="title-text-${s.id}" ondblclick="startRename('${s.id}')" style="cursor:pointer;">${escapeHtml(s.title)}</span>
@@ -59,7 +59,8 @@ function renderSessionTable(sessions, showDisconnect) {
       <td style="text-align:right;">${s.messages}</td>
       <td style="text-align:right;">${s.tool_calls}</td>
       <td style="text-align:right;">${tokenDisplay}</td>
-      <td>${viewBtn}${disconnectBtn}</td>
+      <td><span class="end-reason">${s.end_reason || '-'}</span></td>
+      <td>${viewBtn}</td>
     </tr>`;
   }
   html += '</tbody></table>';
@@ -111,13 +112,3 @@ export async function submitRename(sessionId, newTitle) {
   } catch (err) { alert(`Error: ${err.message}`); cancelRename(sessionId); }
 }
 
-export async function disconnectSession(sessionId, btn) {
-  if (!confirm('Disconnect this session?')) return;
-  btn.disabled = true;
-  btn.textContent = '...';
-  try {
-    const data = await postJson(`/api/sessions/${sessionId}/disconnect`, {});
-    if (data.ok) { btn.textContent = 'Done'; btn.style.color = '#1a7f37'; loadSessions(); }
-    else { btn.textContent = data.error || 'Failed'; btn.style.color = '#cf222e'; }
-  } catch (err) { btn.textContent = 'Error'; btn.style.color = '#cf222e'; }
-}

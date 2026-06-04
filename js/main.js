@@ -3,7 +3,7 @@ import { toggleResponse } from './utils/helpers.js';
 import { initNavigation, switchTab } from './components/navigation.js';
 import { loadStatus } from './components/overview.js';
 import { loadJobs, showPrompt } from './components/jobs.js';
-import { loadSessions, showSessionMessages, disconnectSession, startRename, submitRename, cancelRename } from './components/sessions.js';
+import { loadSessions, showSessionMessages, startRename, submitRename, cancelRename } from './components/sessions.js';
 import { loadSkills, loadMcp, loadPlugins, showSkillContent } from './components/tools.js';
 import { closePromptModal } from './components/modal.js';
 
@@ -31,7 +31,6 @@ Object.assign(window, {
   showPrompt,
   closePromptModal,
   showSessionMessages,
-  disconnectSession,
   startRename,
   submitRename,
   cancelRename,

@@ -300,51 +300,51 @@ def get_sessions_stats(days: int = 7) -> dict:
         """, (cutoff,)).fetchall()
         result["by_source"] = [{"source": r["source"], "sessions": r["cnt"], "messages": r["msgs"]} for r in rows]
 
-        # Active sessions (non-cron, non-api_server, not ended)
+        # All non-cron, non-api_server sessions with last message time
+        # Include sessions active within the time window (by start OR last message)
+        now_ts = datetime.now(tz=TZ_CST).timestamp()
+        idle_threshold = now_ts - 3600  # 1 hour
         rows = cursor.execute("""
-            SELECT id, title, source, model, started_at, ended_at,
-                   message_count, tool_call_count,
-                   COALESCE(input_tokens, 0) as input_tokens,
-                   COALESCE(output_tokens, 0) as output_tokens
-            FROM sessions
-            WHERE source NOT IN ('cron', 'api_server') AND started_at > ? AND ended_at IS NULL
-            ORDER BY started_at DESC LIMIT 20
-        """, (cutoff,)).fetchall()
-        result["recent_sessions"] = [{
-            "id": r["id"],
-            "title": r["title"] or "(untitled)",
-            "source": r["source"],
-            "model": r["model"],
-            "started_at": datetime.fromtimestamp(r["started_at"], tz=TZ_CST).isoformat(),
-            "active": True,
-            "messages": r["message_count"],
-            "tool_calls": r["tool_call_count"],
-            "input_tokens": r["input_tokens"],
-            "output_tokens": r["output_tokens"],
-        } for r in rows]
+            SELECT s.id, s.title, s.source, s.model, s.started_at, s.ended_at,
+                   s.end_reason, s.message_count, s.tool_call_count,
+                   COALESCE(s.input_tokens, 0) as input_tokens,
+                   COALESCE(s.output_tokens, 0) as output_tokens,
+                   (SELECT MAX(m.timestamp) FROM messages m WHERE m.session_id = s.id) as last_message_at
+            FROM sessions s
+            WHERE s.source NOT IN ('cron', 'api_server')
+              AND (s.started_at > ? OR (SELECT MAX(m.timestamp) FROM messages m WHERE m.session_id = s.id) > ?)
+            ORDER BY COALESCE((SELECT MAX(m.timestamp) FROM messages m WHERE m.session_id = s.id), s.started_at) DESC
+            LIMIT 50
+        """, (cutoff, cutoff)).fetchall()
 
-        # Inactive sessions (non-cron, non-api_server, ended)
-        rows = cursor.execute("""
-            SELECT id, title, source, model, started_at, ended_at,
-                   message_count, tool_call_count,
-                   COALESCE(input_tokens, 0) as input_tokens,
-                   COALESCE(output_tokens, 0) as output_tokens
-            FROM sessions
-            WHERE source NOT IN ('cron', 'api_server') AND started_at > ? AND ended_at IS NOT NULL
-            ORDER BY ended_at DESC LIMIT 20
-        """, (cutoff,)).fetchall()
-        result["inactive_sessions"] = [{
-            "id": r["id"],
-            "title": r["title"] or "(untitled)",
-            "source": r["source"],
-            "model": r["model"],
-            "started_at": datetime.fromtimestamp(r["started_at"], tz=TZ_CST).isoformat(),
-            "active": False,
-            "messages": r["message_count"],
-            "tool_calls": r["tool_call_count"],
-            "input_tokens": r["input_tokens"],
-            "output_tokens": r["output_tokens"],
-        } for r in rows]
+        active_sessions = []
+        inactive_sessions = []
+        for r in rows:
+            last_active = r["last_message_at"] or r["started_at"]
+            # Active: last activity within 1 hour (regardless of ended_at,
+            # since some platforms like dingtalk reuse ended sessions)
+            is_active = last_active > idle_threshold
+            session_data = {
+                "id": r["id"],
+                "title": r["title"] or "(untitled)",
+                "source": r["source"],
+                "model": r["model"],
+                "started_at": datetime.fromtimestamp(r["started_at"], tz=TZ_CST).isoformat(),
+                "last_message_at": datetime.fromtimestamp(r["last_message_at"], tz=TZ_CST).isoformat() if r["last_message_at"] else None,
+                "end_reason": r["end_reason"],
+                "active": is_active,
+                "messages": r["message_count"],
+                "tool_calls": r["tool_call_count"],
+                "input_tokens": r["input_tokens"],
+                "output_tokens": r["output_tokens"],
+            }
+            if is_active:
+                active_sessions.append(session_data)
+            else:
+                inactive_sessions.append(session_data)
+
+        result["recent_sessions"] = active_sessions[:20]
+        result["inactive_sessions"] = inactive_sessions[:20]
 
         conn.close()
     except Exception:
@@ -539,33 +539,6 @@ async def api_sessions(request: Request) -> Response:
     return JSONResponse(get_sessions_stats(days=days))
 
 
-async def api_disconnect_session(request: Request) -> Response:
-    """Mark a session as ended (disconnected)."""
-    session_id = request.path_params["session_id"]
-    if not STATE_DB.exists():
-        return JSONResponse({"error": "state.db not found"}, status_code=500)
-    try:
-        conn = sqlite3.connect(str(STATE_DB), timeout=5)
-        cursor = conn.cursor()
-        row = cursor.execute(
-            "SELECT id, ended_at FROM sessions WHERE id = ?", (session_id,)
-        ).fetchone()
-        if not row:
-            conn.close()
-            return JSONResponse({"error": f"Session '{session_id}' not found"}, status_code=404)
-        if row[1] is not None:
-            conn.close()
-            return JSONResponse({"error": "Session already ended"}, status_code=400)
-        conn.execute(
-            "UPDATE sessions SET ended_at = ?, end_reason = ? WHERE id = ?",
-            (time.time(), "manual_disconnect", session_id),
-        )
-        conn.commit()
-        conn.close()
-        return JSONResponse({"ok": True, "session_id": session_id})
-    except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=500)
-
 
 async def api_session_messages(request: Request) -> Response:
     """Return messages for a given session."""
@@ -664,7 +637,6 @@ app = Starlette(routes=[
     Route("/api/status", api_status),
     Route("/api/sessions", api_sessions),
     Route("/api/sessions/{session_id}/messages", api_session_messages),
-    Route("/api/sessions/{session_id}/disconnect", api_disconnect_session, methods=["POST"]),
     Route("/api/sessions/{session_id}/rename", api_rename_session, methods=["POST"]),
     Route("/api/prompt/{job_id}", api_prompt),
     Route("/api/skills", api_skills),

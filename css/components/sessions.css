@@ -53,6 +53,20 @@
   background: #f5f7fa;
 }
 
+.sessions-table tr.session-idle {
+  opacity: 0.5;
+}
+
+.sessions-table tr.session-idle:hover {
+  opacity: 0.8;
+}
+
+.end-reason {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--color-fg-subtle);
+}
+
 .source-badge {
   display: inline-block;
   padding: 1px 8px;
