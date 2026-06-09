@@ -11,6 +11,9 @@
 [20260609]
 - 优化
     - 助手：拆分独立项目，域名assistant.localhost，左导变为一级
+    - 导航：Hermes Assistant图标和字样，移动到左导
+    - 顶导：恢复顶导，之前展示`ermes Assistant图标和字样`的地方，改为展示左导菜单名称（如Overview、CronJobs）
+    - 导航：Cron Jobs，改为CronJobs、去掉中间空格
 
 
 ---

@@ -1,7 +1,7 @@
 const NAV_ITEMS = [
   { title: 'Overview', tab: 'overview', icon: 'overview' },
   { separator: true },
-  { title: 'Cron Jobs', tab: 'cron', icon: 'cron' },
+  { title: 'CronJobs', tab: 'cron', icon: 'cron' },
   { title: 'Sessions', tab: 'sessions', icon: 'sessions' },
   { separator: true },
   { title: 'MCP', tab: 'mcp', icon: 'mcp' },
@@ -62,6 +62,21 @@ function getDisplayTab(tabName) {
   if (parent?.tab && hasTabContent(parent.tab)) return parent.tab;
 
   return 'overview';
+}
+
+function getTabTitle(tabName) {
+  for (const item of NAV_ITEMS) {
+    if (item.separator) continue;
+    if (item.tab === tabName) return item.title;
+    const child = (item.children || []).find(navChild => navChild.tab === tabName);
+    if (child) return child.title;
+  }
+  return 'Overview';
+}
+
+function updateTopbarTitle(tabName) {
+  const title = document.getElementById('topbar-title');
+  if (title) title.textContent = getTabTitle(tabName);
 }
 
 function getStoredSidebarExpanded() {
@@ -131,6 +146,7 @@ export function switchTab(name, updateHash = true) {
   document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
   tabEl?.classList.add('active');
   updateSidebarActive(tabName);
+  updateTopbarTitle(tabName);
   if (updateHash) location.hash = tabName === 'overview' ? '' : tabName;
 }
 

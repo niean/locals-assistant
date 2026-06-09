@@ -28,7 +28,23 @@
 
 <aside class="sidebar" id="app-sidebar" aria-label="主导航">
   <button class="sidebar__toggle" id="sidebar-toggle" type="button" aria-label="展开导航" aria-expanded="false" aria-controls="sidebar-nav">
-    <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+    <span class="sidebar__brand" aria-hidden="true">
+      <svg class="sidebar__brand-icon" width="28" height="28" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="18" cy="18" r="18" fill="#F97316"/>
+        <path d="M18 8L18 11" stroke="white" stroke-width="2" stroke-linecap="round"/>
+        <path d="M18 25L18 28" stroke="white" stroke-width="2" stroke-linecap="round"/>
+        <path d="M8 18L11 18" stroke="white" stroke-width="2" stroke-linecap="round"/>
+        <path d="M25 18L28 18" stroke="white" stroke-width="2" stroke-linecap="round"/>
+        <circle cx="18" cy="18" r="6" stroke="white" stroke-width="2"/>
+        <circle cx="18" cy="18" r="2" fill="white"/>
+        <path d="M12.5 12.5L14 14" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
+        <path d="M22 22L23.5 23.5" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
+        <path d="M12.5 23.5L14 22" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
+        <path d="M22 14L23.5 12.5" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+      <span class="sidebar__brand-title">Assistant</span>
+    </span>
+    <svg class="sidebar__toggle-icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
       <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"/>
     </svg>
   </button>
@@ -36,20 +52,7 @@
 </aside>
 
 <header class="topbar">
-  <svg class="topbar__icon" width="28" height="28" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <circle cx="18" cy="18" r="18" fill="#F97316"/>
-    <path d="M18 8L18 11" stroke="white" stroke-width="2" stroke-linecap="round"/>
-    <path d="M18 25L18 28" stroke="white" stroke-width="2" stroke-linecap="round"/>
-    <path d="M8 18L11 18" stroke="white" stroke-width="2" stroke-linecap="round"/>
-    <path d="M25 18L28 18" stroke="white" stroke-width="2" stroke-linecap="round"/>
-    <circle cx="18" cy="18" r="6" stroke="white" stroke-width="2"/>
-    <circle cx="18" cy="18" r="2" fill="white"/>
-    <path d="M12.5 12.5L14 14" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
-    <path d="M22 22L23.5 23.5" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
-    <path d="M12.5 23.5L14 22" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
-    <path d="M22 14L23.5 12.5" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
-  </svg>
-  <span class="topbar__title">Hermes Assistant</span>
+  <span class="topbar__title" id="topbar-title">Overview</span>
 </header>
 
 <main class="main-content">
