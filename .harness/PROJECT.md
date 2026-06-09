@@ -165,7 +165,8 @@ js/                    -- JavaScript 模块（目标架构）
   components/          -- UI 组件类
   utils/               -- 工具函数
 server.py              -- Python HTTP 服务器 + API
-start-http.sh          -- 启动脚本（launchd 管理）
+scripts/
+  start-http-exec.sh   -- 启动脚本（launchd 管理）
 favicon.svg            -- 站点图标
 ```
 

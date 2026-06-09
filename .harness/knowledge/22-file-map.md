@@ -5,7 +5,8 @@
 
 - 前端入口：`index.html`（纯 HTML 骨架，引用外部 CSS/JS）
 - 后端入口：`server.py`（Starlette HTTP 服务器 + API 路由 + StaticFiles）
-- 启动脚本：`start-http.sh`（launchd 守护进程启动入口）
+- 启动脚本：`scripts/start-http-exec.sh`（launchd 守护进程启动入口）
+- 重启脚本：`scripts/restart-http.sh`（外部执行的 launchd 服务重启入口）
 - 站点图标：`favicon.svg`
 
 ## 后端 API（server.py）
@@ -63,5 +64,5 @@ js/
 
 - 数据源（外部，只读）：`~/.hermes/cron/jobs.json`、`~/.hermes/cron/output/`、`~/.hermes/state.db`
 - 配置文件：`~/.hermes/config.yaml`（读取 model/platforms/mcp_servers）
-- 日志输出：`~/Library/Logs/assistant-http/server.log`
+- 日志输出：`logs/server.log`
 - 进程管理：macOS launchd plist（com.niean.assistant-dashboard）

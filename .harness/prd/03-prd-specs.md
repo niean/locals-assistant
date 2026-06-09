@@ -14,6 +14,8 @@
     - 导航：Hermes Assistant图标和字样，移动到左导
     - 顶导：恢复顶导，之前展示`ermes Assistant图标和字样`的地方，改为展示左导菜单名称（如Overview、CronJobs）
     - 导航：Cron Jobs，改为CronJobs、去掉中间空格
+    - 后端：日志，放到logs/目录下
+    - 治理：前后端代码分目录，前段fe、后端be，存量代码移动过去；fe之前缺少html目录、缺少media目录(存放svg)，可一并治理
 
 
 ---
