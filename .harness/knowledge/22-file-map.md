@@ -3,11 +3,11 @@
 
 ## 应用入口与全局
 
-- 前端入口：`index.html`（纯 HTML 骨架，引用外部 CSS/JS）
-- 后端入口：`server.py`（Starlette HTTP 服务器 + API 路由 + StaticFiles）
-- 启动脚本：`scripts/start-http-exec.sh`（launchd 守护进程启动入口）
-- 重启脚本：`scripts/restart-http.sh`（外部执行的 launchd 服务重启入口）
-- 站点图标：`favicon.svg`
+- 前端入口：`fe/html/index.html`（纯 HTML 骨架，引用外部 CSS/JS）
+- 后端入口：`be/server.py`（Starlette HTTP 服务器 + API 路由 + StaticFiles）
+- 启动脚本：`be/scripts/start-http-exec.sh`（launchd 守护进程启动入口）
+- 重启脚本：`be/scripts/restart-http.sh`（外部执行的 launchd 服务重启入口）
+- 站点图标：`fe/media/favicon.svg`
 
 ## 后端 API（server.py）
 
@@ -25,12 +25,12 @@
 - /api/skills/{path}/content：技能文件内容
 - /api/plugins：插件列表
 - /api/mcp：MCP 服务器列表
-- 静态文件：Mount("/", StaticFiles) 服务 index.html、css/、js/
+- 静态文件：Route("/") 服务 `fe/html/index.html`，Mount("/", StaticFiles) 服务 `fe/css/`、`fe/js/`、`fe/media/`
 
 ## 前端 CSS（ITCSS 分层）
 
 ```
-css/
+fe/css/
   settings/variables.css    -- CSS Custom Properties（颜色、字号、间距、阴影）
   generic/reset.css         -- box-sizing reset + body 基础样式
   components/tab-nav.css    -- 顶部 Tab 导航 + Sub-tab
@@ -47,7 +47,7 @@ css/
 ## 前端 JS（ES6 Modules）
 
 ```
-js/
+fe/js/
   main.js                   -- 应用入口：初始化导航、loadAll、auto-refresh、window 暴露
   utils/constants.js        -- API_BASE、REFRESH_INTERVAL 常量
   utils/helpers.js          -- escapeHtml、linkify、formatNumber、toggleResponse
@@ -64,5 +64,5 @@ js/
 
 - 数据源（外部，只读）：`~/.hermes/cron/jobs.json`、`~/.hermes/cron/output/`、`~/.hermes/state.db`
 - 配置文件：`~/.hermes/config.yaml`（读取 model/platforms/mcp_servers）
-- 日志输出：`logs/server.log`
+- 日志输出：`be/logs/server.log`
 - 进程管理：macOS launchd plist（com.niean.assistant-dashboard）

@@ -88,7 +88,7 @@ Markdown 文件格式（由 Hermes 系统生成）：
 
 ## 边界约定
 
-- 前端不直接构造/解析 Markdown 文件，所有解析由 server.py 完成
+- 前端不直接构造/解析 Markdown 文件，所有解析由 be/server.py 完成
 - API 返回数据已格式化为 JSON，前端直接使用
 - 执行历史按 limit 截取，大量历史数据不全量返回
-- jobs.json 配置与 output/ 目录数据合并逻辑在 server.py 中完成
+- jobs.json 配置与 output/ 目录数据合并逻辑在 be/server.py 中完成

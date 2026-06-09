@@ -54,11 +54,11 @@
 
 - 所有源文件使用 kebab-case：`job-card.js`、`stats-bar.css`
 - 目录名使用 kebab-case
-- Python 文件使用 snake_case：`server.py`（仅后端）
+- Python 文件使用 snake_case：`be/server.py`（仅后端）
 
 ## 常量
 
-- 前端常量集中在 `js/utils/constants.js`
+- 前端常量集中在 `fe/js/utils/constants.js`
 - API 路径常量化：`API_BASE = '/api'`
 - 刷新间隔等可配置项不硬编码在业务代码中
 - 禁止魔法数字，给数字赋予语义命名
@@ -77,14 +77,14 @@
 
 ## 构建验证
 
-- Python：`python3 -c "import py_compile; py_compile.compile('server.py', doraise=True)"`
-- JavaScript：`node --check js/**/*.js`（语法校验，目标架构）
+- Python：`python3 -c "import py_compile; py_compile.compile('be/server.py', doraise=True)"`
+- JavaScript：`node --check fe/js/**/*.js`（语法校验，目标架构）
 - 所有变更后必须通过语法检查
 
 ## 错误处理
 
 - 用户：页面展示友好的中文错误提示（如"数据加载失败，请稍后刷新"）
-- 开发：server.py 使用 logging 模块，记录异常堆栈到 server.log
+- 开发：be/server.py 使用 logging 模块，记录异常堆栈到 server.log
 - API 错误响应格式：`{"error": "错误描述", "code": "ERROR_CODE"}`
 - 超时：API 请求前端 10 秒超时，文件读取后端 5 秒超时
 
@@ -97,7 +97,7 @@
 
 ## 线程与并发
 
-- server.py 使用 ThreadingMixIn 处理并发请求
+- be/server.py 使用 ThreadingMixIn 处理并发请求
 - 文件 I/O 在请求处理线程中同步执行（数据量小，无需异步）
 - 前端单线程，通过 async/await 管理异步
 
@@ -140,5 +140,5 @@
 - 密钥：禁止在代码中硬编码任何密钥或 token，使用环境变量
 - 网络：仅监听 127.0.0.1，不绑定 0.0.0.0
 - 隐私：不收集用户行为数据，日志中不记录请求 IP
-- 文件访问：server.py 读取路径必须限制在 ~/.hermes/ 下，验证路径无 `..` 遍历
+- 文件访问：be/server.py 读取路径必须限制在 ~/.hermes/ 下，验证路径无 `..` 遍历
 - 响应头：设置 Content-Type，避免 MIME 嗅探

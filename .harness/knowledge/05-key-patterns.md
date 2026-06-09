@@ -16,7 +16,7 @@
 
 ## 模式二：Markdown 文件解析
 
-server.py 将 Hermes 输出的 Markdown 文件解析为结构化数据：
+be/server.py 将 Hermes 输出的 Markdown 文件解析为结构化数据：
 
 1. 扫描 output/{job_id}/ 目录下所有 .md 文件
 2. 文件名解析为时间戳（YYYYMMDD-HHMMSS 格式）
@@ -38,7 +38,7 @@ server.py 将 Hermes 输出的 Markdown 文件解析为结构化数据：
 
 ## 模式四：任务配置与执行记录合并
 
-server.py 的 /api/jobs 需要合并两个数据源：
+be/server.py 的 /api/jobs 需要合并两个数据源：
 
 1. 读取 jobs.json 获取任务配置（id/name/schedule/state）
 2. 扫描 output/ 目录获取实际执行记录

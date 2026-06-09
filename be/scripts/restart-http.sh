@@ -3,9 +3,9 @@
 SERVICE_LABEL="com.niean.assistant-dashboard"
 PORT=8090
 DOMAIN="gui/$(id -u)"
-PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+PROJECT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 PLIST="$HOME/Library/LaunchAgents/$SERVICE_LABEL.plist"
-EXPECTED_EXEC="$PROJECT_DIR/scripts/start-http-exec.sh"
+EXPECTED_EXEC="$PROJECT_DIR/be/scripts/start-http-exec.sh"
 
 if [ ! -f "$PLIST" ]; then
     echo "LaunchAgent plist not found: $PLIST" >&2
@@ -15,6 +15,11 @@ fi
 if [ ! -x "$EXPECTED_EXEC" ]; then
     echo "Start script is not executable: $EXPECTED_EXEC" >&2
     exit 1
+fi
+
+CURRENT_EXEC="$(/usr/libexec/PlistBuddy -c 'Print :ProgramArguments:0' "$PLIST" 2>/dev/null || true)"
+if [ "$CURRENT_EXEC" != "$EXPECTED_EXEC" ]; then
+    /usr/libexec/PlistBuddy -c "Set :ProgramArguments:0 $EXPECTED_EXEC" "$PLIST"
 fi
 
 if ! launchctl print "$DOMAIN/$SERVICE_LABEL" >/dev/null 2>&1; then

@@ -17,7 +17,7 @@ from pathlib import Path
 
 from starlette.applications import Starlette
 from starlette.requests import Request
-from starlette.responses import HTMLResponse, JSONResponse, Response
+from starlette.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from starlette.routing import Route, Mount
 from starlette.staticfiles import StaticFiles
 
@@ -27,7 +27,9 @@ CRON_JOBS_FILE = HERMES_DIR / "cron" / "jobs.json"
 STATE_DB = HERMES_DIR / "state.db"
 CONFIG_FILE = HERMES_DIR / "config.yaml"
 PORT = 8090
-STATIC_DIR = Path(__file__).parent
+BASE_DIR = Path(__file__).resolve().parent.parent
+STATIC_DIR = BASE_DIR / "fe"
+INDEX_FILE = STATIC_DIR / "html" / "index.html"
 
 TZ_CST = timezone(timedelta(hours=8))
 
@@ -520,6 +522,10 @@ def get_mcp_servers() -> list:
 
 
 
+async def index(request: Request) -> Response:
+    return FileResponse(INDEX_FILE)
+
+
 async def api_jobs(request: Request) -> Response:
     return JSONResponse(get_all_jobs_summary())
 
@@ -632,6 +638,7 @@ async def api_skill_content(request: Request) -> Response:
 # ═══════════════════════════════════════════════════════════
 
 app = Starlette(routes=[
+    Route("/", index),
     Route("/api/jobs", api_jobs),
     Route("/api/runs/{job_id}", api_runs),
     Route("/api/status", api_status),
@@ -649,6 +656,6 @@ app = Starlette(routes=[
 
 if __name__ == "__main__":
     import uvicorn
-    os.chdir(STATIC_DIR)
+    os.chdir(BASE_DIR)
     print(f"Assistant Dashboard running at http://localhost:{PORT}")
     uvicorn.run(app, host="0.0.0.0", port=PORT, log_level="warning")

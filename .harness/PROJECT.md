@@ -49,18 +49,18 @@ Hermes 管理平台：监控和管理 Hermes cron 任务的执行状态，面向
 ```bash
 # 前端：无构建步骤（纯静态 HTML/CSS/JS）
 # 后端：Python 语法检查
-python3 -c "import py_compile; py_compile.compile('server.py', doraise=True)"
+python3 -c "import py_compile; py_compile.compile('be/server.py', doraise=True)"
 ```
 
 ### 单元测试
 单元测试执行策略：
 - 用户明确要求时：必须执行
-- 修改 server.py API 逻辑后：应执行 API 端点测试
+- 修改 be/server.py API 逻辑后：应执行 API 端点测试
 - 其他场景：跳过
 
 ```bash
 # 当前无自动化测试框架，手动验证：
-# 1. 启动服务: python3 server.py
+# 1. 启动服务: python3 be/server.py
 # 2. 访问 http://localhost:8090 验证页面加载
 # 3. 访问 http://localhost:8090/api/jobs 验证 API 响应
 ```
@@ -115,7 +115,7 @@ python3 -c "import py_compile; py_compile.compile('server.py', doraise=True)"
 
 ## 质量守护
 
-- Python：`python3 -c "import py_compile; py_compile.compile('server.py', doraise=True)"` 零错误
+- Python：`python3 -c "import py_compile; py_compile.compile('be/server.py', doraise=True)"` 零错误
 - JavaScript：ESLint Airbnb 配置零警告（目标）
 - 新代码必须模块化，禁止在 HTML 中内联超过 10 行的 JS/CSS
 - API 响应必须有明确的 JSON 结构，错误时返回 `{"error": "message"}`
@@ -150,24 +150,30 @@ CLAUDE.md              -- Claude Code 入口
     active/
     completed/
     debt-tracker.md    -- 技术债追踪
-index.html             -- 前端入口（单页应用）
-css/                   -- 样式文件（ITCSS 分层，目标架构）
-  settings/            -- 变量、配置
-  tools/               -- Mixins、函数
-  generic/             -- Reset、Normalize
-  elements/            -- HTML 元素默认样式
-  objects/             -- 布局对象
-  components/          -- UI 组件
-  utilities/           -- 工具类
-js/                    -- JavaScript 模块（目标架构）
-  main.js              -- 应用入口
-  services/            -- API 调用、数据服务
-  components/          -- UI 组件类
-  utils/               -- 工具函数
-server.py              -- Python HTTP 服务器 + API
-scripts/
-  start-http-exec.sh   -- 启动脚本（launchd 管理）
-favicon.svg            -- 站点图标
+fe/
+  html/
+    index.html         -- 前端入口（单页应用）
+  css/                 -- 样式文件（ITCSS 分层，目标架构）
+    settings/          -- 变量、配置
+    tools/             -- Mixins、函数
+    generic/           -- Reset、Normalize
+    elements/          -- HTML 元素默认样式
+    objects/           -- 布局对象
+    components/        -- UI 组件
+    utilities/         -- 工具类
+  js/                  -- JavaScript 模块（目标架构）
+    main.js            -- 应用入口
+    services/          -- API 调用、数据服务
+    components/        -- UI 组件类
+    utils/             -- 工具函数
+  media/
+    favicon.svg        -- 站点图标
+be/
+  server.py            -- Python HTTP 服务器 + API
+  scripts/
+    start-http-exec.sh -- 启动脚本（launchd 管理）
+    restart-http.sh    -- 重启脚本
+  logs/                -- 后端运行日志目录
 ```
 
 ## 知识层级关系

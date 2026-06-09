@@ -27,7 +27,6 @@ secrets.json
 .harness/
 
 # Project
-__pycache__/
 locals/*
 !locals/.gitkeep
 logs/*

@@ -1,8 +1,8 @@
 #!/bin/bash
 # start-http-exec.sh - 启动 assistant status dashboard 服务
 
-PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-LOG_DIR="$PROJECT_DIR/logs"
+PROJECT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
+LOG_DIR="$PROJECT_DIR/be/logs"
 LOG_FILE="$LOG_DIR/server.log"
 PORT=8090
 
@@ -27,4 +27,4 @@ fi
 # 启动服务（前台运行，由 launchd 管理）
 cd "$PROJECT_DIR"
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] Starting assistant dashboard on port $PORT" >> "$LOG_FILE"
-exec python3 server.py >> "$LOG_FILE" 2>&1
+exec python3 be/server.py >> "$LOG_FILE" 2>&1
