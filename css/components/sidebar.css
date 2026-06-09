@@ -1,0 +1,144 @@
+:root {
+  --sidebar-width-collapsed: 48px;
+  --sidebar-width-expanded: 200px;
+}
+
+.sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  width: var(--sidebar-width-collapsed);
+  height: 100vh;
+  overflow: hidden;
+  background: var(--color-bg-white);
+  border-right: 1px solid #d1d9e0;
+  box-shadow: 1px 0 3px rgba(0, 0, 0, 0.04);
+  transition: width 0.2s ease;
+}
+
+body.sidebar-expanded .sidebar {
+  width: var(--sidebar-width-expanded);
+}
+
+.sidebar__toggle {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 48px;
+  color: #656d76;
+  background: transparent;
+  border: 0;
+  transition: color 0.15s, background 0.15s;
+}
+
+.sidebar__toggle:hover {
+  color: #1f2328;
+  background: #f6f8fa;
+}
+
+.sidebar__toggle svg {
+  width: 18px;
+  height: 18px;
+  transition: transform 0.2s ease;
+}
+
+body.sidebar-expanded .sidebar__toggle svg {
+  transform: rotate(180deg);
+}
+
+.sidebar__nav {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 6px;
+}
+
+.sidebar__item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 8px;
+  color: #656d76;
+  white-space: nowrap;
+  border-radius: 8px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.sidebar__item:hover {
+  color: #1f2328;
+  background: #f6f8fa;
+}
+
+.sidebar__item--active {
+  color: #0969da;
+  background: #eef6ff;
+}
+
+.sidebar__item-icon {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.sidebar__item-label {
+  max-width: 0;
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 500;
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transition: max-width 0.2s ease, opacity 0.15s;
+}
+
+body.sidebar-expanded .sidebar__item-label {
+  max-width: 140px;
+  visibility: visible;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.sidebar__separator {
+  height: 1px;
+  margin: 6px 8px;
+  background: #eaeef2;
+}
+
+.sidebar__children {
+  display: none;
+  flex-direction: column;
+  gap: 1px;
+  padding: 2px 0 2px 32px;
+}
+
+body.sidebar-expanded .sidebar__item-wrap--open .sidebar__children {
+  display: flex;
+}
+
+.sidebar__child {
+  display: block;
+  padding: 6px 12px;
+  color: #656d76;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  border-radius: 6px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.sidebar__child:hover {
+  color: #1f2328;
+  background: #f6f8fa;
+}
+
+.sidebar__child--active {
+  color: #0969da;
+  font-weight: 600;
+  background: #eef6ff;
+}

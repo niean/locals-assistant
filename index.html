@@ -11,6 +11,7 @@
 <link rel="stylesheet" href="css/generic/reset.css">
 <!-- ITCSS: Components -->
 <link rel="stylesheet" href="css/components/topbar.css">
+<link rel="stylesheet" href="css/components/sidebar.css">
 <link rel="stylesheet" href="css/components/tab-nav.css">
 <link rel="stylesheet" href="css/components/stat-card.css">
 <link rel="stylesheet" href="css/components/status-panel.css">
@@ -24,6 +25,15 @@
 <link rel="stylesheet" href="css/utilities/text.css">
 </head>
 <body>
+
+<aside class="sidebar" id="app-sidebar" aria-label="主导航">
+  <button class="sidebar__toggle" id="sidebar-toggle" type="button" aria-label="展开导航" aria-expanded="false" aria-controls="sidebar-nav">
+    <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+      <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"/>
+    </svg>
+  </button>
+  <nav class="sidebar__nav" id="sidebar-nav" aria-label="Assistant 导航"></nav>
+</aside>
 
 <header class="topbar">
   <svg class="topbar__icon" width="28" height="28" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -110,6 +120,5 @@
 </div>
 
 <script type="module" src="js/main.js"></script>
-<script src="/shared-nav.js"></script>
 </body>
 </html>

@@ -10,8 +10,6 @@
   position: sticky;
   top: 0;
   z-index: 100;
-  margin-left: -16px;
-  padding-left: calc(var(--space-lg) + 16px);
 }
 
 .topbar__icon {
